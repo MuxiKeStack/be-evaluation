@@ -15,6 +15,10 @@ type evaluationRepository struct {
 	dao dao.EvaluationDAO
 }
 
+func NewEvaluationRepository(dao dao.EvaluationDAO) EvaluationRepository {
+	return &evaluationRepository{dao: dao}
+}
+
 func (repo *evaluationRepository) Evaluated(ctx context.Context, publisherId int64, courseId int64) (bool, error) {
 	_, err := repo.dao.FindEvaluation(ctx, publisherId, courseId)
 	switch {

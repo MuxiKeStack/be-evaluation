@@ -13,8 +13,8 @@ type EvaluationServiceServer struct {
 	svc service.EvaluationService
 }
 
-func NewEvaluationServiceServer() *EvaluationServiceServer {
-	return &EvaluationServiceServer{}
+func NewEvaluationServiceServer(svc service.EvaluationService) *EvaluationServiceServer {
+	return &EvaluationServiceServer{svc: svc}
 }
 
 func (s *EvaluationServiceServer) Register(server grpc.ServiceRegistrar) {

@@ -1,5 +1,5 @@
 mysql:
-  dsn: "root:root@tcp(localhost:3306)/kstack"
+  dsn: "root:root@tcp(localhost:3306)/kstack?multiStatements=true&interpolateParams=true"
 
 redis:
   addr: "localhost:6379"

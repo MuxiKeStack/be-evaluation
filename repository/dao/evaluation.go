@@ -17,6 +17,10 @@ type GORMEvaluationDAO struct {
 	db *gorm.DB
 }
 
+func NewGORMEvaluationDAO(db *gorm.DB) EvaluationDAO {
+	return &GORMEvaluationDAO{db: db}
+}
+
 func (dao *GORMEvaluationDAO) FindEvaluation(ctx context.Context, publisherId int64, courseId int64) (Evaluation, error) {
 	var e Evaluation
 	err := dao.db.WithContext(ctx).
