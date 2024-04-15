@@ -10,14 +10,21 @@ import (
 	"github.com/MuxiKeStack/be-evaluation/grpc"
 	"github.com/MuxiKeStack/be-evaluation/ioc"
 	"github.com/MuxiKeStack/be-evaluation/pkg/grpcx"
+	"github.com/MuxiKeStack/be-evaluation/repository"
+	"github.com/MuxiKeStack/be-evaluation/repository/dao"
+	"github.com/MuxiKeStack/be-evaluation/service"
 )
 
 // Injectors from wire.go:
 
 func InitGRPCServer() grpcx.Server {
-	evaluationServiceServer := grpc.NewEvaluationServiceServer()
-	client := ioc.InitEtcdClient()
 	logger := ioc.InitLogger()
+	db := ioc.InitDB(logger)
+	evaluationDAO := dao.NewGORMEvaluationDAO(db)
+	evaluationRepository := repository.NewEvaluationRepository(evaluationDAO)
+	evaluationService := service.NewEvaluationService(evaluationRepository)
+	evaluationServiceServer := grpc.NewEvaluationServiceServer(evaluationService)
+	client := ioc.InitEtcdClient()
 	server := ioc.InitGRPCxKratosServer(evaluationServiceServer, client, logger)
 	return server
 }
