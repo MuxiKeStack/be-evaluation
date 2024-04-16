@@ -1,27 +1,19 @@
 package domain
 
-import "time"
-
-type Evaluation struct {
-	Id          int64
-	PublisherId int64
-	CourseId    int64
-	StarRating  uint8
-	Content     string
-	Status      EvaluationStatus
-	Utime       time.Time
-	Ctime       time.Time
-}
-
-type EvaluationStatus uint8
-
-const (
-	EvaluationStatusUnknown = iota
-	EvaluationStatusPublished
-	EvaluationStatusPrivate
-	EvaluationStatusFolded
+import (
+	coursev1 "github.com/MuxiKeStack/be-api/gen/proto/course/v1"
+	evaluationv1 "github.com/MuxiKeStack/be-api/gen/proto/evaluation/v1"
+	"time"
 )
 
-func (s EvaluationStatus) Uint8() uint8 {
-	return uint8(s)
+type Evaluation struct {
+	Id             int64
+	PublisherId    int64
+	CourseId       int64
+	CourseProperty coursev1.CourseProperty
+	StarRating     uint8
+	Content        string
+	Status         evaluationv1.EvaluationStatus
+	Utime          time.Time
+	Ctime          time.Time
 }
