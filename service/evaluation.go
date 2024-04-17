@@ -21,11 +21,20 @@ type EvaluationService interface {
 	CountCourseInvisible(ctx context.Context, courseId int64) (int64, error)
 	CountMine(ctx context.Context, uid int64, status evaluationv1.EvaluationStatus) (int64, error)
 	Detail(ctx context.Context, evaluationId int64) (domain.Evaluation, error)
+	VisiblePublishersCourse(ctx context.Context, courseId int64) ([]int64, error)
 }
 
 type evaluationService struct {
 	repo         repository.EvaluationRepository
 	courseClient coursev1.CourseServiceClient
+}
+
+func NewEvaluationService(repo repository.EvaluationRepository, courseClient coursev1.CourseServiceClient) EvaluationService {
+	return &evaluationService{repo: repo, courseClient: courseClient}
+}
+
+func (s *evaluationService) VisiblePublishersCourse(ctx context.Context, courseId int64) ([]int64, error) {
+	return s.repo.GetPublishersByCourseIdStatus(ctx, courseId, evaluationv1.EvaluationStatus_Public)
 }
 
 func (s *evaluationService) Detail(ctx context.Context, evaluationId int64) (domain.Evaluation, error) {
@@ -73,10 +82,6 @@ func (s *evaluationService) Save(ctx context.Context, evaluation domain.Evaluati
 		return evaluation.Id, err
 	}
 	return s.repo.Create(ctx, evaluation)
-}
-
-func NewEvaluationService(repo repository.EvaluationRepository) EvaluationService {
-	return &evaluationService{repo: repo}
 }
 
 func (s *evaluationService) Evaluated(ctx context.Context, publisherId int64, courseId int64) (bool, error) {

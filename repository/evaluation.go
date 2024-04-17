@@ -21,10 +21,15 @@ type EvaluationRepository interface {
 	GetCountCourseInvisible(ctx context.Context, courseId int64) (int64, error)
 	GetCountMine(ctx context.Context, uid int64, status evaluationv1.EvaluationStatus) (int64, error)
 	GetDetailById(ctx context.Context, evaluationId int64) (domain.Evaluation, error)
+	GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status evaluationv1.EvaluationStatus) ([]int64, error)
 }
 
 type evaluationRepository struct {
 	dao dao.EvaluationDAO
+}
+
+func (repo *evaluationRepository) GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status evaluationv1.EvaluationStatus) ([]int64, error) {
+	return repo.dao.GetPublishersByCourseIdStatus(ctx, courseId, int32(status))
 }
 
 func (repo *evaluationRepository) GetDetailById(ctx context.Context, evaluationId int64) (domain.Evaluation, error) {

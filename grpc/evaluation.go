@@ -15,6 +15,14 @@ type EvaluationServiceServer struct {
 	svc service.EvaluationService
 }
 
+func (s *EvaluationServiceServer) VisiblePublishersCourse(ctx context.Context,
+	request *evaluationv1.VisiblePublishersCourseRequest) (*evaluationv1.VisiblePublishersCourseResponse, error) {
+	publishers, err := s.svc.VisiblePublishersCourse(ctx, request.GetCourseId())
+	return &evaluationv1.VisiblePublishersCourseResponse{
+		Publishers: publishers,
+	}, err
+}
+
 func (s *EvaluationServiceServer) Detail(ctx context.Context, request *evaluationv1.DetailRequest) (*evaluationv1.DetailResponse, error) {
 	evaluation, err := s.svc.Detail(ctx, request.GetEvaluationId())
 	return &evaluationv1.DetailResponse{Evaluation: convertToV(evaluation)}, err
@@ -41,7 +49,7 @@ func (s *EvaluationServiceServer) ListCourse(ctx context.Context, request *evalu
 	}
 	list, err := s.svc.ListCourse(ctx, curEvaluationId, request.GetLimit(), request.GetCourseId())
 	return &evaluationv1.ListCourseResponse{
-		Evaluation: slice.Map(list, func(idx int, src domain.Evaluation) *evaluationv1.Evaluation {
+		Evaluations: slice.Map(list, func(idx int, src domain.Evaluation) *evaluationv1.Evaluation {
 			return convertToV(src)
 		}),
 	}, err
@@ -56,7 +64,7 @@ func (s *EvaluationServiceServer) ListMine(ctx context.Context, request *evaluat
 	}
 	list, err := s.svc.ListMine(ctx, curEvaluationId, request.GetLimit(), request.GetUid(), request.GetStatus())
 	return &evaluationv1.ListMineResponse{
-		Evaluation: slice.Map(list, func(idx int, src domain.Evaluation) *evaluationv1.Evaluation {
+		Evaluations: slice.Map(list, func(idx int, src domain.Evaluation) *evaluationv1.Evaluation {
 			return convertToV(src)
 		}),
 	}, err
@@ -72,7 +80,7 @@ func (s *EvaluationServiceServer) ListRecent(ctx context.Context,
 	}
 	list, err := s.svc.ListRecent(ctx, curEvaluationId, request.GetLimit(), request.GetProperty())
 	return &evaluationv1.ListRecentResponse{
-		Evaluation: slice.Map(list, func(idx int, src domain.Evaluation) *evaluationv1.Evaluation {
+		Evaluations: slice.Map(list, func(idx int, src domain.Evaluation) *evaluationv1.Evaluation {
 			return convertToV(src)
 		}),
 	}, err
