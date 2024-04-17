@@ -22,9 +22,10 @@ func InitGRPCServer() grpcx.Server {
 	db := ioc.InitDB(logger)
 	evaluationDAO := dao.NewGORMEvaluationDAO(db)
 	evaluationRepository := repository.NewEvaluationRepository(evaluationDAO)
-	evaluationService := service.NewEvaluationService(evaluationRepository)
-	evaluationServiceServer := grpc.NewEvaluationServiceServer(evaluationService)
 	client := ioc.InitEtcdClient()
+	courseServiceClient := ioc.InitCourseClient(client)
+	evaluationService := service.NewEvaluationService(evaluationRepository, courseServiceClient)
+	evaluationServiceServer := grpc.NewEvaluationServiceServer(evaluationService)
 	server := ioc.InitGRPCxKratosServer(evaluationServiceServer, client, logger)
 	return server
 }

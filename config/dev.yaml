@@ -14,3 +14,6 @@ grpc:
     weight: 100
     addr: ":8094"
     etcdTTL: 60
+  client:
+    course:
+      endpoint: "discovery:///course"

@@ -17,6 +17,7 @@ func InitGRPCServer() grpcx.Server {
 		ioc.InitGRPCxKratosServer,
 		grpc.NewEvaluationServiceServer,
 		service.NewEvaluationService,
+		ioc.InitCourseClient,
 		repository.NewEvaluationRepository,
 		dao.NewGORMEvaluationDAO,
 		ioc.InitDB,
