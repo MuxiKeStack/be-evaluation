@@ -12,6 +12,10 @@ import (
 )
 
 func InitDB(l logger.Logger) *gorm.DB {
+	return InitATMysqlDB(l)
+}
+
+func InitMysqlDB(l logger.Logger) *gorm.DB {
 	type Config struct {
 		DSN string `yaml:"dsn"`
 	}
@@ -35,7 +39,7 @@ func InitDB(l logger.Logger) *gorm.DB {
 	return db
 }
 
-func InitATDB(l logger.Logger) *gorm.DB {
+func InitATMysqlDB(l logger.Logger) *gorm.DB {
 	type Config struct {
 		DSN string `yaml:"dsn"`
 	}
