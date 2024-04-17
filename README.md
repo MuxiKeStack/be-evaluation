@@ -1,2 +1,2 @@
 # be-evaluation
-课程服务
+课评服务
