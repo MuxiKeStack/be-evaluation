@@ -9,7 +9,10 @@ import (
 	"github.com/MuxiKeStack/be-evaluation/repository"
 )
 
-var ErrPermissionDenied = errors.New("没有权限")
+var (
+	ErrPermissionDenied               = errors.New("没有权限")
+	ErrCannotEvaluateUnattendedCourse = errors.New("无法评未上过的课")
+)
 
 type EvaluationService interface {
 	Evaluated(ctx context.Context, publisherId int64, courseId int64) (bool, error)
@@ -74,14 +77,25 @@ func (s *evaluationService) UpdateStatus(ctx context.Context, evaluationId int64
 }
 
 func (s *evaluationService) Save(ctx context.Context, evaluation domain.Evaluation) (int64, error) {
-	// 聚合property
-	res, err := s.courseClient.GetDetailById(ctx, &coursev1.GetDetailByIdRequest{
+	// 不是自己的课，不能评
+	subRes, err := s.courseClient.Subscribed(ctx, &coursev1.SubscribedRequest{
+		Uid:      evaluation.PublisherId,
 		CourseId: evaluation.CourseId,
 	})
 	if err != nil {
 		return 0, err
 	}
-	evaluation.CourseProperty = res.GetCourse().GetProperty()
+	if !subRes.GetSubscribed() {
+		return 0, ErrCannotEvaluateUnattendedCourse
+	}
+	// 聚合property
+	detailRes, err := s.courseClient.GetDetailById(ctx, &coursev1.GetDetailByIdRequest{
+		CourseId: evaluation.CourseId,
+	})
+	if err != nil {
+		return 0, err
+	}
+	evaluation.CourseProperty = detailRes.GetCourse().GetProperty()
 	// 下面是一个upsert语义
 	if evaluation.Id > 0 {
 		err = s.repo.Update(ctx, evaluation)
