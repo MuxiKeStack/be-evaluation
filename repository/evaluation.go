@@ -22,10 +22,15 @@ type EvaluationRepository interface {
 	GetCountMine(ctx context.Context, uid int64, status evaluationv1.EvaluationStatus) (int64, error)
 	GetDetailById(ctx context.Context, evaluationId int64) (domain.Evaluation, error)
 	GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status evaluationv1.EvaluationStatus) ([]int64, error)
+	GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error)
 }
 
 type evaluationRepository struct {
 	dao dao.EvaluationDAO
+}
+
+func (repo *evaluationRepository) GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error) {
+	return repo.dao.GetCompositeScoreByCourseId(ctx, courseId)
 }
 
 func (repo *evaluationRepository) GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status evaluationv1.EvaluationStatus) ([]int64, error) {

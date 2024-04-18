@@ -22,6 +22,7 @@ type EvaluationService interface {
 	CountMine(ctx context.Context, uid int64, status evaluationv1.EvaluationStatus) (int64, error)
 	Detail(ctx context.Context, evaluationId int64) (domain.Evaluation, error)
 	VisiblePublishersCourse(ctx context.Context, courseId int64) ([]int64, error)
+	CompositeScoreCourse(ctx context.Context, courseId int64) (float64, error)
 }
 
 type evaluationService struct {
@@ -31,6 +32,11 @@ type evaluationService struct {
 
 func NewEvaluationService(repo repository.EvaluationRepository, courseClient coursev1.CourseServiceClient) EvaluationService {
 	return &evaluationService{repo: repo, courseClient: courseClient}
+}
+
+func (s *evaluationService) CompositeScoreCourse(ctx context.Context, courseId int64) (float64, error) {
+	// 一路透传到数据库层，让数据库处理，性能最优
+	return s.repo.GetCompositeScoreByCourseId(ctx, courseId)
 }
 
 func (s *evaluationService) VisiblePublishersCourse(ctx context.Context, courseId int64) ([]int64, error) {

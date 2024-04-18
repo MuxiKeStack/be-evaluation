@@ -21,6 +21,7 @@ type EvaluationDAO interface {
 	GetCountMine(ctx context.Context, uid int64, status int32) (int64, error)
 	GetDetailById(ctx context.Context, evaluationId int64) (Evaluation, error)
 	GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status int32) ([]int64, error)
+	GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error)
 }
 
 const (
@@ -30,6 +31,16 @@ const (
 
 type GORMEvaluationDAO struct {
 	db *gorm.DB
+}
+
+func (dao *GORMEvaluationDAO) GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error) {
+	var averageRating float64
+	err := dao.db.WithContext(ctx).
+		Model(&Evaluation{}).
+		Select("COALESCE(AVG(CAST(star_rating as double)), 0) as average_rating").
+		Where("course_id = ? and status = ?", courseId, EvaluationStatusPublic).
+		First(&averageRating).Error
+	return averageRating, err
 }
 
 func (dao *GORMEvaluationDAO) GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status int32) ([]int64, error) {

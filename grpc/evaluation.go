@@ -15,6 +15,12 @@ type EvaluationServiceServer struct {
 	svc service.EvaluationService
 }
 
+func (s *EvaluationServiceServer) CompositeScoreCourse(ctx context.Context,
+	request *evaluationv1.CompositeScoreCourseRequest) (*evaluationv1.CompositeScoreCourseResponse, error) {
+	score, err := s.svc.CompositeScoreCourse(ctx, request.GetCourseId())
+	return &evaluationv1.CompositeScoreCourseResponse{Score: score}, err
+}
+
 func (s *EvaluationServiceServer) VisiblePublishersCourse(ctx context.Context,
 	request *evaluationv1.VisiblePublishersCourseRequest) (*evaluationv1.VisiblePublishersCourseResponse, error) {
 	publishers, err := s.svc.VisiblePublishersCourse(ctx, request.GetCourseId())
