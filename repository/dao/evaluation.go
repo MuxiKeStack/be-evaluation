@@ -104,7 +104,7 @@ func (dao *GORMEvaluationDAO) GetListRecent(ctx context.Context, curEvaluationId
 	if property != 0 {
 		query = query.Where("property = ?", property)
 	}
-	query = query.Where("id < ? and status = ?", curEvaluationId, EvaluationStatusPublic)
+	query = query.Where("status = ? and id < ?", EvaluationStatusPublic, curEvaluationId)
 	err := query.Limit(int(limit)).Order("utime desc").Find(&evaluations).Error
 	return evaluations, err
 }
@@ -166,14 +166,15 @@ func (dao *GORMEvaluationDAO) FindEvaluation(ctx context.Context, publisherId in
 	return e, err
 }
 
+// TODO 设计索引，优化查询
 type Evaluation struct {
 	Id             int64 `gorm:"primaryKey,autoIncrement"`
 	PublisherId    int64 `gorm:"uniqueIndex:publisherId_courseId"`
-	CourseId       int64 `gorm:"uniqueIndex:publisherId_courseId"`
+	CourseId       int64 `gorm:"uniqueIndex:publisherId_courseId;index:courseId_status"`
 	CourseProperty int32 // 冗余一个课程性质，用于查询
 	StarRating     uint8
 	Content        string
-	Status         int32
+	Status         int32 `gorm:"index:courseId_status"`
 	Utime          int64
 	Ctime          int64
 }
