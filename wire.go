@@ -7,6 +7,7 @@ import (
 	"github.com/MuxiKeStack/be-evaluation/ioc"
 	"github.com/MuxiKeStack/be-evaluation/pkg/grpcx"
 	"github.com/MuxiKeStack/be-evaluation/repository"
+	"github.com/MuxiKeStack/be-evaluation/repository/cache"
 	"github.com/MuxiKeStack/be-evaluation/repository/dao"
 	"github.com/MuxiKeStack/be-evaluation/service"
 	"github.com/google/wire"
@@ -19,7 +20,9 @@ func InitGRPCServer() grpcx.Server {
 		service.NewEvaluationService,
 		ioc.InitCourseClient,
 		repository.NewEvaluationRepository,
+		cache.NewRedisEvaluationCache,
 		dao.NewGORMEvaluationDAO,
+		ioc.InitRedis,
 		ioc.InitDB,
 		ioc.InitEtcdClient,
 		ioc.InitLogger,

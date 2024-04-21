@@ -5,6 +5,8 @@ import (
 	coursev1 "github.com/MuxiKeStack/be-api/gen/proto/course/v1"
 	evaluationv1 "github.com/MuxiKeStack/be-api/gen/proto/evaluation/v1"
 	"github.com/MuxiKeStack/be-evaluation/domain"
+	"github.com/MuxiKeStack/be-evaluation/pkg/logger"
+	"github.com/MuxiKeStack/be-evaluation/repository/cache"
 	"github.com/MuxiKeStack/be-evaluation/repository/dao"
 	"github.com/ecodeclub/ekit/slice"
 	"time"
@@ -22,15 +24,43 @@ type EvaluationRepository interface {
 	GetCountMine(ctx context.Context, uid int64, status evaluationv1.EvaluationStatus) (int64, error)
 	GetDetailById(ctx context.Context, evaluationId int64) (domain.Evaluation, error)
 	GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status evaluationv1.EvaluationStatus) ([]int64, error)
-	GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error)
+	GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (domain.CompositeScore, error)
 }
 
 type evaluationRepository struct {
-	dao dao.EvaluationDAO
+	dao   dao.EvaluationDAO
+	cache cache.EvaluationCache
+	l     logger.Logger
 }
 
-func (repo *evaluationRepository) GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error) {
-	return repo.dao.GetCompositeScoreByCourseId(ctx, courseId)
+func NewEvaluationRepository(dao dao.EvaluationDAO, cache cache.EvaluationCache, l logger.Logger) EvaluationRepository {
+	return &evaluationRepository{dao: dao, cache: cache, l: l}
+}
+
+func (repo *evaluationRepository) GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (domain.CompositeScore, error) {
+	res, err := repo.cache.GetCompositeScore(ctx, courseId)
+	if err == nil {
+		return res, nil
+	}
+	if err != cache.ErrKetNotExist {
+		repo.l.Error("redis出错", logger.Error(err), logger.Int64("courseId", courseId))
+	}
+	// 查库
+	cs, err := repo.dao.GetCompositeScoreByCourseId(ctx, courseId)
+	res = domain.CompositeScore{
+		CourseId: cs.CourseId,
+		Score:    cs.Score,
+		RaterCnt: cs.RaterCnt,
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		er := repo.cache.SetCompositeScore(ctx, courseId, res)
+		if er != nil {
+			repo.l.Error("回写课程综合得分缓存失败", logger.Error(err), logger.Int64("courseId", courseId))
+		}
+	}()
+	return res, nil
 }
 
 func (repo *evaluationRepository) GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status evaluationv1.EvaluationStatus) ([]int64, error) {
@@ -75,19 +105,27 @@ func (repo *evaluationRepository) GetListRecent(ctx context.Context, curEvaluati
 }
 
 func (repo *evaluationRepository) Update(ctx context.Context, evaluation domain.Evaluation) error {
-	return repo.dao.UpdateById(ctx, repo.toEntity(evaluation))
+	oldRating, err := repo.dao.UpdateById(ctx, repo.toEntity(evaluation))
+	if err != nil {
+		return err
+	}
+	return repo.cache.UpdateRatingIfCompositeScorePresent(ctx, evaluation.CourseId, oldRating, evaluation.StarRating)
 }
 
 func (repo *evaluationRepository) Create(ctx context.Context, evaluation domain.Evaluation) (int64, error) {
-	return repo.dao.Insert(ctx, repo.toEntity(evaluation))
+	evaluationId, err := repo.dao.Insert(ctx, repo.toEntity(evaluation))
+	if err != nil {
+		return 0, err
+	}
+	err = repo.cache.AddRatingIfCompositeScorePresent(ctx, evaluation.CourseId, evaluation.StarRating)
+	if err != nil {
+		return 0, err
+	}
+	return evaluationId, nil
 }
 
 func (repo *evaluationRepository) UpdateStatus(ctx context.Context, evaluationId int64, status evaluationv1.EvaluationStatus, uid int64) error {
 	return repo.dao.UpdateStatus(ctx, evaluationId, uint32(status), uid)
-}
-
-func NewEvaluationRepository(dao dao.EvaluationDAO) EvaluationRepository {
-	return &evaluationRepository{dao: dao}
 }
 
 func (repo *evaluationRepository) Evaluated(ctx context.Context, publisherId int64, courseId int64) (bool, error) {

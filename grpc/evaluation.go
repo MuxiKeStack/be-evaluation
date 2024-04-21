@@ -17,8 +17,11 @@ type EvaluationServiceServer struct {
 
 func (s *EvaluationServiceServer) CompositeScoreCourse(ctx context.Context,
 	request *evaluationv1.CompositeScoreCourseRequest) (*evaluationv1.CompositeScoreCourseResponse, error) {
-	score, err := s.svc.CompositeScoreCourse(ctx, request.GetCourseId())
-	return &evaluationv1.CompositeScoreCourseResponse{Score: score}, err
+	c, err := s.svc.CompositeScoreCourse(ctx, request.GetCourseId())
+	return &evaluationv1.CompositeScoreCourseResponse{
+		Score:      c.Score,
+		RaterCount: c.RaterCnt,
+	}, err
 }
 
 func (s *EvaluationServiceServer) VisiblePublishersCourse(ctx context.Context,

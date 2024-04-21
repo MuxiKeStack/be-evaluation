@@ -17,3 +17,9 @@ type Evaluation struct {
 	Utime          time.Time
 	Ctime          time.Time
 }
+
+type CompositeScore struct {
+	CourseId int64
+	Score    float64
+	RaterCnt int64
+}

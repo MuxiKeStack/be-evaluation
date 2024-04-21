@@ -12,7 +12,8 @@ var ErrorRecordNotFind = gorm.ErrRecordNotFound
 type EvaluationDAO interface {
 	FindEvaluation(ctx context.Context, publisherId int64, courseId int64) (Evaluation, error)
 	UpdateStatus(ctx context.Context, evaluationId int64, status uint32, uid int64) error
-	UpdateById(ctx context.Context, evaluation Evaluation) error
+	// 更新课评并返回旧的星级
+	UpdateById(ctx context.Context, evaluation Evaluation) (oldRating uint8, err error)
 	Insert(ctx context.Context, evaluation Evaluation) (int64, error)
 	GetListRecent(ctx context.Context, curEvaluationId int64, limit int64, property int32) ([]Evaluation, error)
 	GetListCourse(ctx context.Context, curEvaluationId int64, limit int64, courseId int64) ([]Evaluation, error)
@@ -21,7 +22,7 @@ type EvaluationDAO interface {
 	GetCountMine(ctx context.Context, uid int64, status int32) (int64, error)
 	GetDetailById(ctx context.Context, evaluationId int64) (Evaluation, error)
 	GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status int32) ([]int64, error)
-	GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error)
+	GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (CompositeScore, error)
 }
 
 const (
@@ -33,14 +34,19 @@ type GORMEvaluationDAO struct {
 	db *gorm.DB
 }
 
-func (dao *GORMEvaluationDAO) GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (float64, error) {
-	var averageRating float64
+func (dao *GORMEvaluationDAO) GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (CompositeScore, error) {
+	// 这是聚合的写法
+	//var averageRating float64
+	//err := dao.db.WithContext(ctx).
+	//	Model(&Evaluation{}).
+	//	Select("COALESCE(AVG(CAST(star_rating as double)), 0) as average_rating").
+	//	Where("course_id = ? and status = ?", courseId, EvaluationStatusPublic).
+	//	First(&averageRating).Error
+	var cs CompositeScore
 	err := dao.db.WithContext(ctx).
-		Model(&Evaluation{}).
-		Select("COALESCE(AVG(CAST(star_rating as double)), 0) as average_rating").
-		Where("course_id = ? and status = ?", courseId, EvaluationStatusPublic).
-		First(&averageRating).Error
-	return averageRating, err
+		Where("course_id = ?", courseId).
+		First(&cs).Error
+	return cs, err
 }
 
 func (dao *GORMEvaluationDAO) GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status int32) ([]int64, error) {
@@ -63,7 +69,8 @@ func (dao *GORMEvaluationDAO) GetDetailById(ctx context.Context, evaluationId in
 
 func (dao *GORMEvaluationDAO) GetCountMine(ctx context.Context, uid int64, status int32) (int64, error) {
 	var count int64
-	err := dao.db.WithContext(ctx).Model(&Evaluation{}).
+	err := dao.db.WithContext(ctx).
+		Model(&Evaluation{}).
 		Where("publisher_id = ? and status = ?", uid, status).
 		Count(&count).Error
 	return count, err
@@ -71,7 +78,8 @@ func (dao *GORMEvaluationDAO) GetCountMine(ctx context.Context, uid int64, statu
 
 func (dao *GORMEvaluationDAO) GetCountCourseInvisible(ctx context.Context, courseId int64) (int64, error) {
 	var count int64
-	err := dao.db.WithContext(ctx).Model(&Evaluation{}).
+	err := dao.db.WithContext(ctx).
+		Model(&Evaluation{}).
 		Where("course_id = ? and status != ?", courseId, EvaluationStatusPublic).
 		Count(&count).Error
 	return count, err
@@ -109,23 +117,53 @@ func (dao *GORMEvaluationDAO) GetListRecent(ctx context.Context, curEvaluationId
 	return evaluations, err
 }
 
-func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluation) error {
-	res := dao.db.WithContext(ctx).Model(&Evaluation{}).
-		Where("id = ? and publisher_id = ?", evaluation.Id, evaluation.PublisherId).
-		Updates(map[string]any{
-			"star_rating": evaluation.StarRating,
-			"content":     evaluation.Content,
-			"status":      evaluation.Status,
-			"utime":       time.Now().UnixMilli(),
-		})
-	err := res.Error
+func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluation) (oldRating uint8, err error) {
+	now := time.Now().UnixMilli()
+	err = dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 先获取原有评价的星级
+		err := tx.Model(&Evaluation{}).
+			Select("star_rating").
+			Where("id = ? AND publisher_id = ?", evaluation.Id, evaluation.PublisherId).
+			Scan(&oldRating).Error
+		if err != nil {
+			return err
+		}
+
+		// 更新评价
+		res := tx.Model(&Evaluation{}).
+			Where("id = ? AND publisher_id = ?", evaluation.Id, evaluation.PublisherId).
+			Updates(map[string]any{
+				"star_rating": evaluation.StarRating,
+				"content":     evaluation.Content,
+				"status":      evaluation.Status,
+				"utime":       now,
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("更新数据失败")
+		}
+
+		// 更新综合得分，假设老评分和新评分都影响总评分
+		if oldRating != evaluation.StarRating { // 只在评分改变时更新得分
+			sql := `
+			UPDATE composite_scores
+			SET 
+    			Score = ((Score * RaterCnt - ? + ?) / RaterCnt)
+			WHERE CourseId = ?
+			`
+			if err := tx.Exec(sql, float64(oldRating), float64(evaluation.StarRating), evaluation.CourseId).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if res.RowsAffected == 0 {
-		return errors.New("更新数据失败")
-	}
-	return nil
+	return oldRating, nil
 }
 
 func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int64, status uint32, uid int64) error {
@@ -148,10 +186,33 @@ func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int
 
 func (dao *GORMEvaluationDAO) Insert(ctx context.Context, evaluation Evaluation) (int64, error) {
 	now := time.Now().UnixMilli()
+	// 设置时间
 	evaluation.Ctime = now
 	evaluation.Utime = now
-	err := dao.db.WithContext(ctx).Create(&evaluation).Error
-	return evaluation.Id, err
+
+	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 创建评价记录
+		err := tx.Create(&evaluation).Error
+		if err != nil {
+			return err
+		}
+
+		// 使用 upsert 来更新或插入分数
+		sql := `
+		INSERT INTO composite_scores (CourseId, Score, RaterCnt)
+		VALUES (?, ?, 1)
+		ON DUPLICATE KEY UPDATE 
+		    Score = ((Score * RaterCnt + VALUES(Score)) / (RaterCnt + 1)),
+		    RaterCnt = RaterCnt + 1
+		`
+		// 执行 SQL 更新操作
+		return tx.Exec(sql, evaluation.CourseId, float64(evaluation.StarRating)).Error
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return evaluation.Id, nil
 }
 
 func NewGORMEvaluationDAO(db *gorm.DB) EvaluationDAO {
@@ -177,4 +238,12 @@ type Evaluation struct {
 	Status         int32 `gorm:"index:courseId_status"`
 	Utime          int64
 	Ctime          int64
+}
+
+// 维护一个综合得分
+type CompositeScore struct {
+	Id       int64 `gorm:"primaryKey,autoIncrement"`
+	CourseId int64 `gorm:"uniqueIndex"`
+	Score    float64
+	RaterCnt int64
 }

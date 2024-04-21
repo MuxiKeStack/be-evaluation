@@ -11,6 +11,7 @@ import (
 	"github.com/MuxiKeStack/be-evaluation/ioc"
 	"github.com/MuxiKeStack/be-evaluation/pkg/grpcx"
 	"github.com/MuxiKeStack/be-evaluation/repository"
+	"github.com/MuxiKeStack/be-evaluation/repository/cache"
 	"github.com/MuxiKeStack/be-evaluation/repository/dao"
 	"github.com/MuxiKeStack/be-evaluation/service"
 )
@@ -21,7 +22,9 @@ func InitGRPCServer() grpcx.Server {
 	logger := ioc.InitLogger()
 	db := ioc.InitDB(logger)
 	evaluationDAO := dao.NewGORMEvaluationDAO(db)
-	evaluationRepository := repository.NewEvaluationRepository(evaluationDAO)
+	cmdable := ioc.InitRedis()
+	evaluationCache := cache.NewRedisEvaluationCache(cmdable)
+	evaluationRepository := repository.NewEvaluationRepository(evaluationDAO, evaluationCache, logger)
 	client := ioc.InitEtcdClient()
 	courseServiceClient := ioc.InitCourseClient(client)
 	evaluationService := service.NewEvaluationService(evaluationRepository, courseServiceClient)
