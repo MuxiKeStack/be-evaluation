@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"time"
 )
 
@@ -11,9 +12,9 @@ var ErrorRecordNotFind = gorm.ErrRecordNotFound
 
 type EvaluationDAO interface {
 	FindEvaluation(ctx context.Context, publisherId int64, courseId int64) (Evaluation, error)
-	UpdateStatus(ctx context.Context, evaluationId int64, status uint32, uid int64) error
+	UpdateStatus(ctx context.Context, evaluationId int64, status uint32, uid int64) (OldEvaluation, error)
 	// 更新课评并返回旧的星级
-	UpdateById(ctx context.Context, evaluation Evaluation) (oldRating uint8, err error)
+	UpdateById(ctx context.Context, evaluation Evaluation) (OldEvaluation, error)
 	Insert(ctx context.Context, evaluation Evaluation) (int64, error)
 	GetListRecent(ctx context.Context, curEvaluationId int64, limit int64, property int32) ([]Evaluation, error)
 	GetListCourse(ctx context.Context, curEvaluationId int64, limit int64, courseId int64) ([]Evaluation, error)
@@ -26,8 +27,9 @@ type EvaluationDAO interface {
 }
 
 const (
-	EvaluationStatusPublic = 0
-	EvaluationStatusFolded = 2
+	EvaluationStatusPublic  = 0
+	EvaluationStatusFolded  = 2
+	EvaluationStatusPrivate = 0
 )
 
 type GORMEvaluationDAO struct {
@@ -109,7 +111,7 @@ func (dao *GORMEvaluationDAO) GetListRecent(ctx context.Context, curEvaluationId
 	var evaluations []Evaluation
 	query := dao.db.WithContext(ctx)
 	const CoursePropertyAny = 0
-	if property != 0 {
+	if property != CoursePropertyAny {
 		query = query.Where("property = ?", property)
 	}
 	query = query.Where("status = ? and id < ?", EvaluationStatusPublic, curEvaluationId)
@@ -117,19 +119,26 @@ func (dao *GORMEvaluationDAO) GetListRecent(ctx context.Context, curEvaluationId
 	return evaluations, err
 }
 
-func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluation) (oldRating uint8, err error) {
+type OldEvaluation struct {
+	CourseId   int64
+	StarRating uint8
+	Status     int32
+}
+
+func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluation) (OldEvaluation, error) {
 	now := time.Now().UnixMilli()
-	err = dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 先获取原有评价的星级
+	var oe OldEvaluation
+	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 先获取原有评价的星级，并锁定该行直到事务结束
 		err := tx.Model(&Evaluation{}).
-			Select("star_rating").
+			Clauses(clause.Locking{Strength: "UPDATE"}). // 添加行级锁
+			Select("course_id, star_rating, status").
 			Where("id = ? AND publisher_id = ?", evaluation.Id, evaluation.PublisherId).
-			Scan(&oldRating).Error
+			First(&oe).Error
 		if err != nil {
 			return err
 		}
 
-		// 更新评价
 		res := tx.Model(&Evaluation{}).
 			Where("id = ? AND publisher_id = ?", evaluation.Id, evaluation.PublisherId).
 			Updates(map[string]any{
@@ -144,49 +153,107 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
 		if res.RowsAffected == 0 {
 			return errors.New("更新数据失败")
 		}
-
-		// 更新综合得分，假设老评分和新评分都影响总评分
-		if oldRating != evaluation.StarRating { // 只在评分改变时更新得分
-			sql := `
-			UPDATE composite_scores
-			SET 
-    			Score = ((Score * RaterCnt - ? + ?) / RaterCnt)
-			WHERE CourseId = ?
-			`
-			if err := tx.Exec(sql, float64(oldRating), float64(evaluation.StarRating), evaluation.CourseId).Error; err != nil {
-				return err
+		switch {
+		case oe.Status == EvaluationStatusPrivate && evaluation.Status == EvaluationStatusPrivate:
+			return nil
+		case oe.Status == EvaluationStatusPublic && evaluation.Status == EvaluationStatusPublic:
+			if oe.StarRating != evaluation.StarRating { // 只在评分改变时更新得分
+				sql := `
+				UPDATE composite_scores
+				SET 
+    				score = ((score * rater_cnt - ? + ?) / rater_cnt)
+				WHERE course_id = ?
+				`
+				return tx.Exec(sql, float64(oe.StarRating), float64(evaluation.StarRating), oe.CourseId).Error
 			}
+			return nil
+		case oe.Status == EvaluationStatusPrivate && evaluation.Status == EvaluationStatusPublic:
+			sql := `
+        	UPDATE composite_scores
+        	SET score = ((score * rater_cnt + ?) / (rater_cnt + 1)),
+        	    rater_cnt = rater_cnt + 1
+        	WHERE course_id = ?;
+    		`
+			return tx.Exec(sql, float64(evaluation.StarRating), oe.CourseId).Error
+		case oe.Status == EvaluationStatusPublic && evaluation.Status == EvaluationStatusPrivate:
+			sql := `
+        	UPDATE composite_scores
+        	SET score = ((score * rater_cnt - ?) / (rater_cnt - 1)),
+         		rater_cnt = rater_cnt - 1
+        	WHERE course_id = ?;
+    		`
+			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
+		default:
+			return errors.New("非法的课评新旧状态变迁")
 		}
-
-		return nil
 	})
 	if err != nil {
-		return 0, err
+		return OldEvaluation{}, err
 	}
-	return oldRating, nil
+	return oe, nil
 }
 
-func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int64, status uint32, uid int64) error {
-	res := dao.db.WithContext(ctx).Model(&Evaluation{}).
-		// 不让用户直接更改被折叠的课评的状态
-		Where("id = ? and publisher_id = ? and status != ?", evaluationId, uid, EvaluationStatusFolded).
-		Updates(map[string]any{
-			"utime":  time.Now().UnixMilli(),
-			"status": status,
-		})
-	err := res.Error
+func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int64, status uint32, uid int64) (OldEvaluation, error) {
+	var oe OldEvaluation
+	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 先获取原有评价的状态，并锁定该行直到事务结束
+		err := tx.Model(&Evaluation{}).
+			Clauses(clause.Locking{Strength: "UPDATE"}). // 添加行级锁
+			Select("course_id, star_rating, status").
+			Where("id = ? AND publisher_id = ?", evaluationId, uid).
+			First(&oe).Error
+		if err != nil {
+			return err
+		}
+
+		// 更新状态
+		res := tx.Model(&Evaluation{}).
+			Where("id = ? AND publisher_id = ? AND status != ?", evaluationId, uid, EvaluationStatusFolded).
+			Updates(map[string]any{
+				"utime":  time.Now().UnixMilli(),
+				"status": status,
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("更新数据失败")
+		}
+
+		// 更新综分，根据评价状态的变化
+		switch {
+		case oe.Status == EvaluationStatusPrivate && status == EvaluationStatusPublic:
+			// 新增语义
+			sql := `
+			UPDATE composite_scores
+			SET score = ((score * rater_cnt + ?) / (rater_cnt + 1)),
+			    rater_cnt = rater_cnt + 1
+			WHERE course_id = ?;
+			`
+			// 执行 SQL 更新操作
+			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
+		case oe.Status == EvaluationStatusPublic && status == EvaluationStatusPrivate:
+			// 删除语义
+			sql := `
+			UPDATE composite_scores
+			SET score = ((score * rater_cnt - ?) / (rater_cnt - 1)),
+				rater_cnt = rater_cnt - 1
+			WHERE course_id = ?;
+			`
+			// 执行 SQL 更新操作
+			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
+		default:
+			return nil
+		}
+	})
 	if err != nil {
-		return err
+		return OldEvaluation{}, err
 	}
-	if res.RowsAffected == 0 {
-		return errors.New("更新数据失败")
-	}
-	return nil
+	return oe, nil
 }
 
 func (dao *GORMEvaluationDAO) Insert(ctx context.Context, evaluation Evaluation) (int64, error) {
 	now := time.Now().UnixMilli()
-	// 设置时间
 	evaluation.Ctime = now
 	evaluation.Utime = now
 
@@ -196,14 +263,17 @@ func (dao *GORMEvaluationDAO) Insert(ctx context.Context, evaluation Evaluation)
 		if err != nil {
 			return err
 		}
-
+		if evaluation.Status == EvaluationStatusPrivate {
+			// 非公开的课评，不计入评分
+			return nil
+		}
 		// 使用 upsert 来更新或插入分数
 		sql := `
-		INSERT INTO composite_scores (CourseId, Score, RaterCnt)
+		INSERT INTO composite_scores (course_id, score, rater_cnt)
 		VALUES (?, ?, 1)
 		ON DUPLICATE KEY UPDATE 
-		    Score = ((Score * RaterCnt + VALUES(Score)) / (RaterCnt + 1)),
-		    RaterCnt = RaterCnt + 1
+		    score = ((score * rater_cnt + VALUES(score)) / (rater_cnt + 1)),
+		    rater_cnt = rater_cnt + 1
 		`
 		// 执行 SQL 更新操作
 		return tx.Exec(sql, evaluation.CourseId, float64(evaluation.StarRating)).Error
