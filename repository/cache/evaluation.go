@@ -22,6 +22,8 @@ var (
 	updateRatingLuaScript string
 	//go:embed lua/composite_score_add_rating.lua
 	addRatingLuaScript string
+	//go:embed lua/composite_score_delete_rating.lua
+	deleteRatingLuaScript string
 )
 
 type EvaluationCache interface {
@@ -29,6 +31,7 @@ type EvaluationCache interface {
 	SetCompositeScore(ctx context.Context, courseId int64, cs domain.CompositeScore) error
 	UpdateRatingIfCompositeScorePresent(ctx context.Context, courseId int64, oldRating uint8, newRating uint8) error
 	AddRatingIfCompositeScorePresent(ctx context.Context, courseId int64, starRating uint8) error
+	DeleteRatingIfCompositeScorePresent(ctx context.Context, courseId int64, starRating uint8) error
 }
 
 type RedisEvaluationCache struct {
@@ -71,6 +74,11 @@ func (cache *RedisEvaluationCache) UpdateRatingIfCompositeScorePresent(ctx conte
 func (cache *RedisEvaluationCache) AddRatingIfCompositeScorePresent(ctx context.Context, courseId int64, starRating uint8) error {
 	key := cache.compositeScoreKey(courseId)
 	return cache.cmd.Eval(ctx, addRatingLuaScript, []string{key}, starRating).Err()
+}
+
+func (cache *RedisEvaluationCache) DeleteRatingIfCompositeScorePresent(ctx context.Context, courseId int64, starRating uint8) error {
+	key := cache.compositeScoreKey(courseId)
+	return cache.cmd.Eval(ctx, deleteRatingLuaScript, []string{key}, starRating).Err()
 }
 
 func (cache *RedisEvaluationCache) compositeScoreKey(courseId int64) string {
