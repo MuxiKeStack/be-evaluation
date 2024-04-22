@@ -28,8 +28,8 @@ type EvaluationDAO interface {
 
 const (
 	EvaluationStatusPublic  = 0
+	EvaluationStatusPrivate = 1
 	EvaluationStatusFolded  = 2
-	EvaluationStatusPrivate = 0
 )
 
 type GORMEvaluationDAO struct {
@@ -177,10 +177,17 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
 			return tx.Exec(sql, float64(evaluation.StarRating), oe.CourseId).Error
 		case oe.Status == EvaluationStatusPublic && evaluation.Status == EvaluationStatusPrivate:
 			sql := `
-        	UPDATE composite_scores
-        	SET score = ((score * rater_cnt - ?) / (rater_cnt - 1)),
-         		rater_cnt = rater_cnt - 1
-        	WHERE course_id = ?;
+			UPDATE composite_scores
+			SET 
+    			score = CASE 
+                			WHEN rater_cnt = 1 THEN 0
+                			ELSE ((score * rater_cnt - ?) / (rater_cnt - 1))
+            			END,
+    			rater_cnt = CASE 
+                    			WHEN rater_cnt = 1 THEN 0
+                    			ELSE rater_cnt - 1
+                			END
+			WHERE course_id = ?;
     		`
 			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
 		default:
@@ -236,10 +243,17 @@ func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int
 			// 删除语义
 			sql := `
 			UPDATE composite_scores
-			SET score = ((score * rater_cnt - ?) / (rater_cnt - 1)),
-				rater_cnt = rater_cnt - 1
+			SET 
+    			score = CASE 
+                			WHEN rater_cnt = 1 THEN 0
+                			ELSE ((score * rater_cnt - ?) / (rater_cnt - 1))
+            			END,
+    			rater_cnt = CASE 
+                    			WHEN rater_cnt = 1 THEN 0
+                    			ELSE rater_cnt - 1
+                			END
 			WHERE course_id = ?;
-			`
+    		`
 			// 执行 SQL 更新操作
 			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
 		default:
