@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ErrKetNotExist = redis.Nil
+var ErrKeyNotExists = redis.Nil
 
 const (
 	filedScore    = "score"
@@ -47,6 +47,9 @@ func (cache *RedisEvaluationCache) GetCompositeScore(ctx context.Context, course
 	data, err := cache.cmd.HGetAll(ctx, key).Result()
 	if err != nil {
 		return domain.CompositeScore{}, err
+	}
+	if len(data) == 0 {
+		return domain.CompositeScore{}, ErrKeyNotExists
 	}
 	score, _ := strconv.ParseFloat(data[filedScore], 64)
 	raterCnt, _ := strconv.ParseInt(data[filedRaterCnt], 10, 64)

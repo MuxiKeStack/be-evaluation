@@ -43,7 +43,7 @@ func (repo *evaluationRepository) GetCompositeScoreByCourseId(ctx context.Contex
 	if err == nil {
 		return res, nil
 	}
-	if err != cache.ErrKetNotExist {
+	if err != cache.ErrKeyNotExists {
 		repo.l.Error("redis出错", logger.Error(err), logger.Int64("courseId", courseId))
 	}
 	// 查库
