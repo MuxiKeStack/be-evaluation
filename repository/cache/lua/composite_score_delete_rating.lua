@@ -15,7 +15,11 @@ local currentValues = redis.call('HMGET', key, 'score', 'rater_cnt')
 local currentScore = tonumber(currentValues[1])
 local currentCount = tonumber(currentValues[2])
 
+if currentCount == 1 then
+    redis.call('HSET', key, 'score', 0, 'rater_cnt', 0)
+    return 1
+end
 local newCount = currentCount - 1
 local newScore = ((currentScore * currentCount) - rating) / newCount
-redis.call('HSET', key, 'score', newScore, "rater_cnt", newCount)
+redis.call('HSET', key, 'score', newScore, 'rater_cnt', newCount)
 return 1
