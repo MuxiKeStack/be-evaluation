@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	coursev1 "github.com/MuxiKeStack/be-api/gen/proto/course/v1"
 	evaluationv1 "github.com/MuxiKeStack/be-api/gen/proto/evaluation/v1"
 	"github.com/MuxiKeStack/be-evaluation/domain"
@@ -105,11 +106,22 @@ func (repo *evaluationRepository) GetListRecent(ctx context.Context, curEvaluati
 }
 
 func (repo *evaluationRepository) Update(ctx context.Context, evaluation domain.Evaluation) error {
-	oldRating, err := repo.dao.UpdateById(ctx, repo.toEntity(evaluation))
+	oe, err := repo.dao.UpdateById(ctx, repo.toEntity(evaluation))
 	if err != nil {
 		return err
 	}
-	return repo.cache.UpdateRatingIfCompositeScorePresent(ctx, evaluation.CourseId, oldRating, evaluation.StarRating)
+	switch {
+	case oe.Status == dao.EvaluationStatusPrivate && evaluation.Status == evaluationv1.EvaluationStatus_Private:
+		return nil
+	case oe.Status == dao.EvaluationStatusPublic && evaluation.Status == evaluationv1.EvaluationStatus_Public:
+		return repo.cache.UpdateRatingIfCompositeScorePresent(ctx, oe.CourseId, oe.StarRating, evaluation.StarRating)
+	case oe.Status == dao.EvaluationStatusPrivate && evaluation.Status == evaluationv1.EvaluationStatus_Public:
+		return repo.cache.AddRatingIfCompositeScorePresent(ctx, oe.CourseId, evaluation.StarRating)
+	case oe.Status == dao.EvaluationStatusPublic && evaluation.Status == evaluationv1.EvaluationStatus_Private:
+		return repo.cache.DeleteRatingIfCompositeScorePresent(ctx, oe.CourseId, oe.StarRating)
+	default:
+		return errors.New("不合法的课评状态")
+	}
 }
 
 func (repo *evaluationRepository) Create(ctx context.Context, evaluation domain.Evaluation) (int64, error) {
@@ -117,6 +129,10 @@ func (repo *evaluationRepository) Create(ctx context.Context, evaluation domain.
 	if err != nil {
 		return 0, err
 	}
+	if evaluation.Status == evaluationv1.EvaluationStatus_Private {
+		return evaluationId, nil
+	}
+	// public
 	err = repo.cache.AddRatingIfCompositeScorePresent(ctx, evaluation.CourseId, evaluation.StarRating)
 	if err != nil {
 		return 0, err
@@ -125,7 +141,18 @@ func (repo *evaluationRepository) Create(ctx context.Context, evaluation domain.
 }
 
 func (repo *evaluationRepository) UpdateStatus(ctx context.Context, evaluationId int64, status evaluationv1.EvaluationStatus, uid int64) error {
-	return repo.dao.UpdateStatus(ctx, evaluationId, uint32(status), uid)
+	oe, err := repo.dao.UpdateStatus(ctx, evaluationId, uint32(status), uid)
+	if err != nil {
+		return err
+	}
+	switch {
+	case oe.Status == dao.EvaluationStatusPrivate && status == evaluationv1.EvaluationStatus_Public:
+		return repo.cache.AddRatingIfCompositeScorePresent(ctx, oe.CourseId, oe.StarRating)
+	case oe.Status == dao.EvaluationStatusPublic && status == evaluationv1.EvaluationStatus_Private:
+		return repo.cache.DeleteRatingIfCompositeScorePresent(ctx, oe.CourseId, oe.StarRating)
+	default:
+		return nil
+	}
 }
 
 func (repo *evaluationRepository) Evaluated(ctx context.Context, publisherId int64, courseId int64) (bool, error) {
