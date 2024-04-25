@@ -129,7 +129,7 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
 	now := time.Now().UnixMilli()
 	var oe OldEvaluation
 	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 先获取原有评价的星级，并锁定该行直到事务结束
+		// 先获取原有评价的星级，并锁定该行直到事务结束，这里是一个检查，然后做某事的场景
 		err := tx.Model(&Evaluation{}).
 			Clauses(clause.Locking{Strength: "UPDATE"}). // 添加行级锁
 			Select("course_id, star_rating, status").
