@@ -111,11 +111,11 @@ func (repo *evaluationRepository) Update(ctx context.Context, evaluation domain.
 		return err
 	}
 	switch {
-	case oe.Status == dao.EvaluationStatusPrivate && evaluation.Status == evaluationv1.EvaluationStatus_Private:
+	case (oe.Status == dao.EvaluationStatusPrivate || oe.Status == dao.EvaluationStatusFolded) && evaluation.Status == evaluationv1.EvaluationStatus_Private:
 		return nil
 	case oe.Status == dao.EvaluationStatusPublic && evaluation.Status == evaluationv1.EvaluationStatus_Public:
 		return repo.cache.UpdateRatingIfCompositeScorePresent(ctx, oe.CourseId, oe.StarRating, evaluation.StarRating)
-	case oe.Status == dao.EvaluationStatusPrivate && evaluation.Status == evaluationv1.EvaluationStatus_Public:
+	case (oe.Status == dao.EvaluationStatusPrivate || oe.Status == dao.EvaluationStatusFolded) && evaluation.Status == evaluationv1.EvaluationStatus_Public:
 		return repo.cache.AddRatingIfCompositeScorePresent(ctx, oe.CourseId, evaluation.StarRating)
 	case oe.Status == dao.EvaluationStatusPublic && evaluation.Status == evaluationv1.EvaluationStatus_Private:
 		return repo.cache.DeleteRatingIfCompositeScorePresent(ctx, oe.CourseId, oe.StarRating)

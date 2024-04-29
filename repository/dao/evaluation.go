@@ -125,6 +125,7 @@ type OldEvaluation struct {
 	Status     int32
 }
 
+// 这里的有问题 todo
 func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluation) (OldEvaluation, error) {
 	now := time.Now().UnixMilli()
 	var oe OldEvaluation
@@ -154,7 +155,7 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
 			return errors.New("更新数据失败")
 		}
 		switch {
-		case oe.Status == EvaluationStatusPrivate && evaluation.Status == EvaluationStatusPrivate:
+		case (oe.Status == EvaluationStatusPrivate || oe.Status == EvaluationStatusFolded) && evaluation.Status == EvaluationStatusPrivate:
 			return nil
 		case oe.Status == EvaluationStatusPublic && evaluation.Status == EvaluationStatusPublic:
 			if oe.StarRating != evaluation.StarRating { // 只在评分改变时更新得分
@@ -167,7 +168,7 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
 				return tx.Exec(sql, float64(oe.StarRating), float64(evaluation.StarRating), oe.CourseId).Error
 			}
 			return nil
-		case oe.Status == EvaluationStatusPrivate && evaluation.Status == EvaluationStatusPublic:
+		case (oe.Status == EvaluationStatusPrivate || oe.Status == EvaluationStatusFolded) && evaluation.Status == EvaluationStatusPublic:
 			sql := `
         	UPDATE composite_scores
         	SET score = ((score * rater_cnt + ?) / (rater_cnt + 1)),
@@ -256,8 +257,11 @@ func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int
     		`
 			// 执行 SQL 更新操作
 			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
-		default:
+		case oe.Status == EvaluationStatusPrivate && status == EvaluationStatusPrivate ||
+			oe.Status == EvaluationStatusPublic && status == EvaluationStatusPublic:
 			return nil
+		default:
+			return errors.New("不合法的评课状态变更")
 		}
 	})
 	if err != nil {
