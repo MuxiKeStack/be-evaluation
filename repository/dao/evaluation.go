@@ -155,7 +155,7 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
 			return errors.New("更新数据失败")
 		}
 		switch {
-		case (oe.Status == EvaluationStatusPrivate || oe.Status == EvaluationStatusFolded) && evaluation.Status == EvaluationStatusPrivate:
+		case (oe.Status == EvaluationStatusPrivate || oe.Status == EvaluationStatusFolded) && (evaluation.Status == EvaluationStatusPrivate || evaluation.Status == EvaluationStatusFolded):
 			return nil
 		case oe.Status == EvaluationStatusPublic && evaluation.Status == EvaluationStatusPublic:
 			if oe.StarRating != evaluation.StarRating { // 只在评分改变时更新得分
@@ -176,7 +176,7 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
         	WHERE course_id = ?;
     		`
 			return tx.Exec(sql, float64(evaluation.StarRating), oe.CourseId).Error
-		case oe.Status == EvaluationStatusPublic && evaluation.Status == EvaluationStatusPrivate:
+		case oe.Status == EvaluationStatusPublic && (evaluation.Status == EvaluationStatusPrivate || evaluation.Status == EvaluationStatusFolded):
 			sql := `
 			UPDATE composite_scores
 			SET 
@@ -230,7 +230,7 @@ func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int
 
 		// 更新综分，根据评价状态的变化
 		switch {
-		case oe.Status == EvaluationStatusPrivate && status == EvaluationStatusPublic:
+		case (oe.Status == EvaluationStatusPrivate || oe.Status == EvaluationStatusFolded) && status == EvaluationStatusPublic:
 			// 新增语义
 			sql := `
 			UPDATE composite_scores
@@ -240,7 +240,7 @@ func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int
 			`
 			// 执行 SQL 更新操作
 			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
-		case oe.Status == EvaluationStatusPublic && status == EvaluationStatusPrivate:
+		case oe.Status == EvaluationStatusPublic && (status == EvaluationStatusPrivate || status == EvaluationStatusFolded):
 			// 删除语义
 			sql := `
 			UPDATE composite_scores
@@ -257,7 +257,8 @@ func (dao *GORMEvaluationDAO) UpdateStatus(ctx context.Context, evaluationId int
     		`
 			// 执行 SQL 更新操作
 			return tx.Exec(sql, float64(oe.StarRating), oe.CourseId).Error
-		case oe.Status == EvaluationStatusPrivate && status == EvaluationStatusPrivate ||
+		case (oe.Status == EvaluationStatusPrivate || oe.Status == EvaluationStatusFolded) &&
+			(status == EvaluationStatusPrivate || status == EvaluationStatusFolded) ||
 			oe.Status == EvaluationStatusPublic && status == EvaluationStatusPublic:
 			return nil
 		default:
