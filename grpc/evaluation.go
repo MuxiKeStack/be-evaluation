@@ -113,6 +113,9 @@ func (s *EvaluationServiceServer) Evaluated(ctx context.Context,
 
 func (s *EvaluationServiceServer) Save(ctx context.Context,
 	request *evaluationv1.SaveRequest) (*evaluationv1.SaveResponse, error) {
+	if request.GetEvaluation().GetId() == 0 && request.GetEvaluation().GetStatus() != evaluationv1.EvaluationStatus_Public {
+		return nil, evaluationv1.ErrorInvalidInput("不可以非公开状态发布课评")
+	}
 	id, err := s.svc.Save(ctx, convertDomain(request.GetEvaluation()))
 	return &evaluationv1.SaveResponse{EvaluationId: id}, err
 }
