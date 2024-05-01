@@ -12,6 +12,7 @@ import (
 var (
 	ErrPermissionDenied               = errors.New("没有权限")
 	ErrCannotEvaluateUnattendedCourse = errors.New("无法评未上过的课")
+	ErrEvaluationNotFound             = repository.ErrEvaluationNotFound
 )
 
 type EvaluationService interface {

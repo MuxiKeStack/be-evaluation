@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+var ErrEvaluationNotFound = dao.ErrorRecordNotFind
+
 type EvaluationRepository interface {
 	Evaluated(ctx context.Context, publisherId int64, courseId int64) (bool, error)
 	UpdateStatus(ctx context.Context, evaluationId int64, status evaluationv1.EvaluationStatus, uid int64) error

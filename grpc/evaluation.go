@@ -34,6 +34,9 @@ func (s *EvaluationServiceServer) VisiblePublishersCourse(ctx context.Context,
 
 func (s *EvaluationServiceServer) Detail(ctx context.Context, request *evaluationv1.DetailRequest) (*evaluationv1.DetailResponse, error) {
 	evaluation, err := s.svc.Detail(ctx, request.GetEvaluationId())
+	if err == service.ErrEvaluationNotFound {
+		return &evaluationv1.DetailResponse{}, evaluationv1.ErrorEvaluationNotFound("课评不存在: %d", request.GetEvaluationId())
+	}
 	return &evaluationv1.DetailResponse{Evaluation: convertToV(evaluation)}, err
 }
 
