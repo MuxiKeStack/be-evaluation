@@ -16,6 +16,8 @@ type EvaluationDAO interface {
 	// 更新课评并返回旧的星级
 	UpdateById(ctx context.Context, evaluation Evaluation) (OldEvaluation, error)
 	Insert(ctx context.Context, evaluation Evaluation) (int64, error)
+	// 这里是给迁移脚本是用的insert,ctime和utime也通过上层传入
+	InsertWithTime(ctx context.Context, evaluation Evaluation) (int64, error)
 	GetListRecent(ctx context.Context, curEvaluationId int64, limit int64, property int32) ([]Evaluation, error)
 	GetListCourse(ctx context.Context, curEvaluationId int64, limit int64, courseId int64) ([]Evaluation, error)
 	GetListMine(ctx context.Context, curEvaluationId int64, limit int64, uid int64, status int32) ([]Evaluation, error)
@@ -34,6 +36,35 @@ const (
 
 type GORMEvaluationDAO struct {
 	db *gorm.DB
+}
+
+func (dao *GORMEvaluationDAO) InsertWithTime(ctx context.Context, evaluation Evaluation) (int64, error) {
+	err := dao.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 创建评价记录
+		err := tx.Create(&evaluation).Error
+		if err != nil {
+			return err
+		}
+		if evaluation.Status == EvaluationStatusPrivate {
+			// 非公开的课评，不计入评分
+			return nil
+		}
+		// 使用 upsert 来更新或插入分数
+		sql := `
+		INSERT INTO composite_scores (course_id, score, rater_cnt)
+		VALUES (?, ?, 1)
+		ON DUPLICATE KEY UPDATE 
+		    score = ((score * rater_cnt + VALUES(score)) / (rater_cnt + 1)),
+		    rater_cnt = rater_cnt + 1
+		`
+		// 执行 SQL 更新操作
+		return tx.Exec(sql, evaluation.CourseId, float64(evaluation.StarRating)).Error
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return evaluation.Id, nil
 }
 
 func (dao *GORMEvaluationDAO) GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (CompositeScore, error) {
