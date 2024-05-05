@@ -120,6 +120,9 @@ func (s *EvaluationServiceServer) Save(ctx context.Context,
 		return nil, evaluationv1.ErrorInvalidInput("不可以非公开状态发布课评")
 	}
 	id, err := s.svc.Save(ctx, convertDomain(request.GetEvaluation()))
+	if err == service.ErrCannotEvaluateUnattendedCourse {
+		return &evaluationv1.SaveResponse{}, evaluationv1.ErrorCanNotEvaluateUnattendedCourse("不能评价未上过的课程")
+	}
 	return &evaluationv1.SaveResponse{EvaluationId: id}, err
 }
 
