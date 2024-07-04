@@ -143,7 +143,7 @@ func (dao *GORMEvaluationDAO) GetListRecent(ctx context.Context, curEvaluationId
 	query := dao.db.WithContext(ctx)
 	const CoursePropertyAny = 0
 	if property != CoursePropertyAny {
-		query = query.Where("property = ?", property)
+		query = query.Where("course_property = ?", property)
 	}
 	query = query.Where("status = ? and id < ?", EvaluationStatusPublic, curEvaluationId)
 	err := query.Limit(int(limit)).Order("utime desc").Find(&evaluations).Error
