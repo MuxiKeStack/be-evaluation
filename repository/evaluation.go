@@ -56,14 +56,21 @@ func (repo *evaluationRepository) GetCompositeScoreByCourseId(ctx context.Contex
 		RaterCnt: cs.RaterCnt,
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		er := repo.cache.SetCompositeScore(ctx, courseId, res)
-		if er != nil {
-			repo.l.Error("回写课程综合得分缓存失败", logger.Error(err), logger.Int64("courseId", courseId))
+		if err == nil || err == dao.ErrorRecordNotFind {
+			// 即使没找到也缓存一个空，为了防止恶意用户带来的缓存穿透
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			er := repo.cache.SetCompositeScore(ctx, courseId, res)
+			if er != nil {
+				repo.l.Error("回写课程综合得分缓存失败", logger.Error(err), logger.Int64("courseId", courseId))
+			}
 		}
 	}()
-	return res, nil
+	// 不返回任何err，因为没有找到也属于正常行为
+	if err == nil || err == dao.ErrorRecordNotFind {
+		return res, nil
+	}
+	return res, err
 }
 
 func (repo *evaluationRepository) GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status evaluationv1.EvaluationStatus) ([]int64, error) {
