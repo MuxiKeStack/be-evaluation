@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/MuxiKeStack/be-evaluation/domain"
 	"github.com/redis/go-redis/v9"
+	"math/rand/v2"
 	"strconv"
 	"time"
 )
@@ -66,7 +67,8 @@ func (cache *RedisEvaluationCache) SetCompositeScore(ctx context.Context, course
 	if err != nil {
 		return err
 	}
-	return cache.cmd.Expire(ctx, key, time.Minute*15).Err()
+	n := rand.IntN(181) // 随机偏移的秒数[0, 180]，防止缓存雪崩
+	return cache.cmd.Expire(ctx, key, time.Minute*15+time.Second*time.Duration(n)).Err()
 }
 
 func (cache *RedisEvaluationCache) UpdateRatingIfCompositeScorePresent(ctx context.Context, courseId int64, oldRating uint8, newRating uint8) error {
