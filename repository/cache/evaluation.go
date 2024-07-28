@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/MuxiKeStack/be-evaluation/domain"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/singleflight"
 	"math/rand/v2"
 	"strconv"
 	"time"
@@ -37,6 +38,7 @@ type EvaluationCache interface {
 
 type RedisEvaluationCache struct {
 	cmd redis.Cmdable
+	g   singleflight.Group
 }
 
 func NewRedisEvaluationCache(cmd redis.Cmdable) EvaluationCache {
@@ -63,12 +65,16 @@ func (cache *RedisEvaluationCache) GetCompositeScore(ctx context.Context, course
 
 func (cache *RedisEvaluationCache) SetCompositeScore(ctx context.Context, courseId int64, cs domain.CompositeScore) error {
 	key := cache.compositeScoreKey(courseId)
-	err := cache.cmd.HSet(ctx, key, filedScore, cs.Score, filedRaterCnt, cs.RaterCnt).Err()
-	if err != nil {
-		return err
-	}
-	n := rand.IntN(181) // 随机偏移的秒数[0, 180]，防止缓存雪崩
-	return cache.cmd.Expire(ctx, key, time.Minute*15+time.Second*time.Duration(n)).Err()
+	// 使用singleflight, 防止缓存击穿
+	_, err, _ := cache.g.Do(key, func() (interface{}, error) {
+		err := cache.cmd.HSet(ctx, key, filedScore, cs.Score, filedRaterCnt, cs.RaterCnt).Err()
+		if err != nil {
+			return nil, err
+		}
+		n := rand.IntN(181) // 随机偏移的秒数[0, 180]，防止缓存雪崩
+		return nil, cache.cmd.Expire(ctx, key, time.Minute*15+time.Second*time.Duration(n)).Err()
+	})
+	return err
 }
 
 func (cache *RedisEvaluationCache) UpdateRatingIfCompositeScorePresent(ctx context.Context, courseId int64, oldRating uint8, newRating uint8) error {
