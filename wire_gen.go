@@ -20,9 +20,10 @@ import (
 
 func InitGRPCServer() grpcx.Server {
 	logger := ioc.InitLogger()
-	db := ioc.InitDB(logger)
-	evaluationDAO := dao.NewGORMEvaluationDAO(db)
 	cmdable := ioc.InitRedis()
+	limiter := ioc.InitLimiter(cmdable)
+	db := ioc.InitDB(logger, limiter)
+	evaluationDAO := dao.NewGORMEvaluationDAO(db)
 	evaluationCache := cache.NewRedisEvaluationCache(cmdable)
 	evaluationRepository := repository.NewEvaluationRepository(evaluationDAO, evaluationCache, logger)
 	client := ioc.InitEtcdClient()

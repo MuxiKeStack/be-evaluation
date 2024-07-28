@@ -24,6 +24,7 @@ func InitGRPCServer() grpcx.Server {
 		dao.NewGORMEvaluationDAO,
 		ioc.InitRedis,
 		ioc.InitDB,
+		ioc.InitLimiter,
 		ioc.InitEtcdClient,
 		ioc.InitLogger,
 	)

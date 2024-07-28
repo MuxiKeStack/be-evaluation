@@ -1,7 +1,10 @@
 package ioc
 
 import (
+	"context"
 	"database/sql"
+	evaluationv1 "github.com/MuxiKeStack/be-api/gen/proto/evaluation/v1"
+	"github.com/MuxiKeStack/be-evaluation/pkg/limiter"
 	"github.com/MuxiKeStack/be-evaluation/pkg/logger"
 	"github.com/MuxiKeStack/be-evaluation/repository/dao"
 	sql2 "github.com/seata/seata-go/pkg/datasource/sql"
@@ -9,13 +12,14 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	glogger "gorm.io/gorm/logger"
+	"time"
 )
 
-func InitDB(l logger.Logger) *gorm.DB {
-	return InitATMysqlDB(l)
+func InitDB(l logger.Logger, lm limiter.Limiter) *gorm.DB {
+	return InitATMysqlDB(l, lm)
 }
 
-func InitMysqlDB(l logger.Logger) *gorm.DB {
+func InitMysqlDB(l logger.Logger, lm limiter.Limiter) *gorm.DB {
 	type Config struct {
 		DSN string `yaml:"dsn"`
 	}
@@ -36,10 +40,26 @@ func InitMysqlDB(l logger.Logger) *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
+	err = db.Callback().Query().Before("*").Register("RateLimitGormMiddleware", func(d *gorm.DB) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+		defer cancel()
+		ok, er := lm.Limit(ctx, "kstack:evaluation:sql-gorm:query")
+		if er == nil && ok {
+			// 触发限流
+			_ = d.AddError(evaluationv1.ErrorGormTooManyRequest("GORM-SQL请求限流"))
+			return
+		}
+		if er != nil {
+			l.Error("限流失败", logger.Error(er))
+		}
+	})
+	if err != nil {
+		panic(err)
+	}
 	return db
 }
 
-func InitATMysqlDB(l logger.Logger) *gorm.DB {
+func InitATMysqlDB(l logger.Logger, lm limiter.Limiter) *gorm.DB {
 	type Config struct {
 		DSN string `yaml:"dsn"`
 	}
@@ -63,6 +83,22 @@ func InitATMysqlDB(l logger.Logger) *gorm.DB {
 		panic(err)
 	}
 	err = dao.InitTables(db)
+	if err != nil {
+		panic(err)
+	}
+	err = db.Callback().Query().Before("*").Register("RateLimitGormMiddleware", func(d *gorm.DB) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+		defer cancel()
+		ok, er := lm.Limit(ctx, "kstack:evaluation:sql-gorm:query")
+		if er == nil && ok {
+			// 触发限流
+			_ = d.AddError(evaluationv1.ErrorGormTooManyRequest("GORM-SQL请求限流"))
+			return
+		}
+		if er != nil {
+			l.Error("限流失败", logger.Error(er))
+		}
+	})
 	if err != nil {
 		panic(err)
 	}
