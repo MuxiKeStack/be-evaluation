@@ -66,8 +66,7 @@ func (repo *evaluationRepository) GetCompositeScoreByCourseId(ctx context.Contex
 			}
 		}
 	}()
-	// 不返回任何err，因为没有找到也属于正常行为
-	if err == nil || err == dao.ErrorRecordNotFind {
+	if err == nil || err == dao.ErrorRecordNotFind { // 不返回任何err，因为没有找到也属于正常行为
 		return res, nil
 	}
 	return res, err
