@@ -16,7 +16,7 @@ import (
 )
 
 func InitDB(l logger.Logger, lm limiter.Limiter) *gorm.DB {
-	return InitATMysqlDB(l, lm)
+	return InitMysqlDB(l, lm)
 }
 
 func InitMysqlDB(l logger.Logger, lm limiter.Limiter) *gorm.DB {
