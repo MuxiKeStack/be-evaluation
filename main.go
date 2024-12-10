@@ -1,14 +1,13 @@
 package main
 
 import (
-	"github.com/seata/seata-go/pkg/client"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 func main() {
 	initViper()
-	client.InitPath("config/seatago.yaml")
+	//client.InitPath("config/seatago.yaml")
 	server := InitGRPCServer()
 	err := server.Serve()
 	if err != nil {
