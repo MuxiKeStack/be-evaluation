@@ -196,6 +196,7 @@ func (repo *evaluationRepository) toDomain(e dao.Evaluation) domain.Evaluation {
 		StarRating:     e.StarRating,
 		Content:        e.Content,
 		Status:         evaluationv1.EvaluationStatus(e.Status),
+		IsAnonymous:    e.IsAnonymous,
 		Utime:          time.UnixMilli(e.Utime),
 		Ctime:          time.UnixMilli(e.Ctime),
 	}

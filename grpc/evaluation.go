@@ -152,6 +152,7 @@ func convertToV(e domain.Evaluation) *evaluationv1.Evaluation {
 		StarRating:  uint32(e.StarRating),
 		Content:     e.Content,
 		Status:      e.Status,
+		IsAnonymous: e.IsAnonymous,
 		Utime:       e.Utime.UnixMilli(),
 		Ctime:       e.Ctime.UnixMilli(),
 	}

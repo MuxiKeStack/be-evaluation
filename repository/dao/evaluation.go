@@ -26,6 +26,7 @@ type EvaluationDAO interface {
 	GetDetailById(ctx context.Context, evaluationId int64) (Evaluation, error)
 	GetPublishersByCourseIdStatus(ctx context.Context, courseId int64, status int32) ([]int64, error)
 	GetCompositeScoreByCourseId(ctx context.Context, courseId int64) (CompositeScore, error)
+	UpdateIsAnonymousById(background context.Context, uid int64, courseId int64, fields map[string]any) error
 }
 
 const (
@@ -36,6 +37,10 @@ const (
 
 type GORMEvaluationDAO struct {
 	db *gorm.DB
+}
+
+func (dao *GORMEvaluationDAO) UpdateIsAnonymousById(ctx context.Context, uid int64, courseId int64, fields map[string]any) error {
+	return dao.db.WithContext(ctx).Model(&Evaluation{}).Where("publisher_id = ? and course_id = ?", uid, courseId).Updates(fields).Error
 }
 
 func (dao *GORMEvaluationDAO) InsertWithTime(ctx context.Context, evaluation Evaluation) (int64, error) {
@@ -356,6 +361,7 @@ type Evaluation struct {
 	StarRating     uint8
 	Content        string
 	Status         int32 `gorm:"index:courseId_status"`
+	IsAnonymous    bool
 	Utime          int64
 	Ctime          int64
 }

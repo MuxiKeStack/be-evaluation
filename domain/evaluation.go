@@ -14,6 +14,7 @@ type Evaluation struct {
 	StarRating     uint8
 	Content        string
 	Status         evaluationv1.EvaluationStatus
+	IsAnonymous    bool
 	Utime          time.Time
 	Ctime          time.Time
 }
