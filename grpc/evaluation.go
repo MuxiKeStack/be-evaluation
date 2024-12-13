@@ -141,6 +141,7 @@ func convertDomain(e *evaluationv1.Evaluation) domain.Evaluation {
 		StarRating:  uint8(e.StarRating),
 		Content:     e.Content,
 		Status:      e.Status,
+		IsAnonymous: e.IsAnonymous,
 	}
 }
 

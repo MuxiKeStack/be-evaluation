@@ -179,10 +179,11 @@ func (dao *GORMEvaluationDAO) UpdateById(ctx context.Context, evaluation Evaluat
 		res := tx.Model(&Evaluation{}).
 			Where("id = ? AND publisher_id = ?", evaluation.Id, evaluation.PublisherId).
 			Updates(map[string]any{
-				"star_rating": evaluation.StarRating,
-				"content":     evaluation.Content,
-				"status":      evaluation.Status,
-				"utime":       now,
+				"star_rating":  evaluation.StarRating,
+				"content":      evaluation.Content,
+				"status":       evaluation.Status,
+				"is_anonymous": evaluation.IsAnonymous,
+				"utime":        now,
 			})
 		if res.Error != nil {
 			return res.Error

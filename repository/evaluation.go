@@ -184,6 +184,7 @@ func (repo *evaluationRepository) toEntity(e domain.Evaluation) dao.Evaluation {
 		StarRating:     e.StarRating,
 		Content:        e.Content,
 		Status:         int32(e.Status),
+		IsAnonymous:    e.IsAnonymous,
 	}
 }
 
